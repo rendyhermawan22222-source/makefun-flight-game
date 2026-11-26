@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nusantara Skies — a flight game over the Indonesian archipelago</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1c2c;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #fff; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .panel { position: fixed; background: rgba(8, 24, 38, 0.72); border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(2px); }
+  #hud-top { top: 12px; left: 12px; display: flex; gap: 22px; align-items: center; }
+  .gauge { text-align: center; }
+  .gauge .label { font-size: 10px; letter-spacing: 2px; color: #9fd8ff; }
+  .gauge .value { font-size: 24px; font-weight: 700; font-family: monospace; color: #fff; text-shadow: 0 0 8px #4db2ff; }
+  #hud-mission-box { top: 12px; right: 12px; width: 320px; text-align: right; }
+  #hud-mission { font-size: 18px; font-weight: 700; color: #ffd166; }
+  #hud-goal { font-size: 12px; color: #dceefc; margin-top: 2px; }
+  #hud-target { font-size: 13px; font-weight: 700; color: #7dffb0; margin-top: 4px; font-family: monospace; }
+  #hud-bottom { bottom: 12px; left: 12px; right: 12px; display: flex; gap: 18px; align-items: flex-end; }
+  .bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: monospace; }
+  .bar-row span { width: 52px; color: #cfe8ff; }
+  .bar { flex: 1; height: 10px; background: rgba(255,255,255,0.18); border-radius: 5px; overflow: hidden; }
+  .bar-fill { height: 100%; background: #37b6ff; border-radius: 5px; transition: width 0.2s; }
+  .bar-fill.low { background: #ff5a3c; }
+  #hud-dmg { background: #ffb300; }
+  #hud-score { font-size: 18px; font-weight: 700; font-family: monospace; color: #ffd166; white-space: nowrap; }
+  #hud-clock { font-size: 18px; font-family: monospace; }
+  #hud-state { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #7dffb0; }
+  #hud-state.crashed { color: #ff6b5e; }
+  #hud-state.complete { color: #ffd166; }
+  #hud-message { position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 700; text-align: center; color: #fff;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s; pointer-events: none;
+    background: rgba(8,24,38,0.55); padding: 8px 18px; border-radius: 10px; max-width: 80%; }
+  #instruments { position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 110px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(8,24,38,0.6); display: none; }
+  #title-card { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 560px; max-width: 92vw; background: rgba(8, 24, 38, 0.86); border: 1px solid #ffd166;
+    border-radius: 16px; padding: 26px 30px; text-align: center; }
+  #title-card h1 { font-size: 40px; color: #ffd166; letter-spacing: 1px; }
+  #title-card h2 { font-size: 15px; font-weight: 400; color: #9fd8ff; margin: 4px 0 14px; }
+  #title-card p { font-size: 14px; line-height: 1.55; color: #eaf4fc; }
+  #title-card .missions { text-align: left; margin: 14px auto 6px; font-size: 14px; line-height: 1.9; }
+  #title-card .missions b { color: #ffd166; }
+  #title-card .keys { font-size: 12px; color: #9fb8cc; margin-top: 12px; line-height: 1.7; }
+  #title-card .keys b { color: #fff; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="hud-top" class="panel">
+  <div class="gauge"><div class="label">ALTITUDE</div><div class="value" id="hud-alt">0 ft</div></div>
+  <div class="gauge"><div class="label">SPEED</div><div class="value" id="hud-speed">0 kt</div></div>
+  <div class="gauge"><div class="label">HEADING</div><div class="value" id="hud-hdg">090° E</div></div>
+</div>
+
+<div id="hud-mission-box" class="panel">
+  <div id="hud-mission">Nusantara Skies</div>
+  <div id="hud-goal">Pick a mission — or just fly.</div>
+  <div id="hud-target">PRESS 1–4 TO PICK A MISSION</div>
+</div>
+
+<canvas id="instruments" width="300" height="110"></canvas>
+<div id="hud-message"></div>
+
+<div id="hud-bottom" class="panel">
+  <div class="bars">
+    <div class="bar-row"><span id="hud-fuel-text">FUEL 100%</span><div class="bar"><div class="bar-fill" id="hud-fuel" style="width:100%"></div></div></div>
+    <div class="bar-row"><span id="hud-dmg-text">DMG 0%</span><div class="bar"><div class="bar-fill" id="hud-dmg" style="width:0%"></div></div></div>
+    <div class="bar-row"><span id="hud-throttle-text">THR 0%</span><div class="bar"><div class="bar-fill" id="hud-throttle" style="width:0%"></div></div></div>
+  </div>
+  <div id="hud-score">SCORE 0</div>
+  <div id="hud-clock">00:00</div>
+  <div id="hud-state" class="state">ON RUNWAY</div>
+</div>
+
+<div id="title-card">
+  <h1>NUSANTARA SKIES</h1>
+  <h2>A dawn flight over the Indonesian archipelago</h2>
+  <p>Fly the island-hopper <b>Garuda Kecil</b> from Pulau Merdeka. Mind your throttle,
+  bank gently, watch the fuel — and bring her home in one piece.</p>
+  <div class="missions">
+    <b>1</b> — Ring Time Trial: thread 8 sky rings, beat 3:00<br>
+    <b>2</b> — Island Hop Delivery: land cargo on Karang, then Kabut<br>
+    <b>3</b> — Short Strip Landing: 210 m of runway on Pulau Kabut<br>
+    <b>4</b> — Storm Front Run: six gates in rain and gusts
+  </div>
+  <div class="keys">
+    <b>W / S</b> throttle &nbsp;·&nbsp; <b>↑ ↓</b> pitch &nbsp;·&nbsp; <b>← → / A D</b> bank &amp; turn<br>
+    <b>Mouse drag</b> steer &nbsp;·&nbsp; <b>C</b> cockpit / chase &nbsp;·&nbsp; <b>B</b> brake<br>
+    <b>R</b> reset &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>M</b> sound
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
